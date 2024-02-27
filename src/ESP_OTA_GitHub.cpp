@@ -9,16 +9,14 @@
 
 #include "ESP_OTA_GitHub.h"
 
-ESPOTAGitHub::ESPOTAGitHub(BearSSL::CertStore* certStore, const char* user, const char* repo, const char* currentTag, const char* binFile, bool preRelease, size_t jsonCapacity) {
+ESPOTAGitHub::ESPOTAGitHub(BearSSL::CertStore* certStore, const char* user, const char* repo, const char* currentTag, const char* binFile) {
     _certStore = certStore;
     _user = user;
     _repo = repo;
     _currentTag = currentTag;
     _binFile = binFile;
-    _preRelease = preRelease;
     _lastError = "";
     _upgradeURL = "";
-    _jsonCapacity = jsonCapacity;
 }
 
 /* Private methods */
@@ -165,50 +163,54 @@ bool ESPOTAGitHub::checkUpgrade() {
     //client->stop();
 	  
 	// --- ArduinoJSON v6 --- //
-	 
 	// Get from https://arduinojson.org/v6/assistant/
-    if (_jsonCapacity == 0) {
-	    const size_t _jsonCapacity = JSON_ARRAY_SIZE(3) + 3*JSON_OBJECT_SIZE(13) + 5*JSON_OBJECT_SIZE(18) + 5560;
-    }
+    /* Deserialize and filter:
+        {
+        "tag_name": true,
+        "name": true,
+        "assets": [
+            {
+            "content_type": true,
+            "name": true,
+            "browser_download_url": true
+            }
+        ]
+        }
+*/
 
-	DynamicJsonDocument doc(_jsonCapacity);
+    StaticJsonDocument<112> filter;
+    filter["tag_name"] = true;
+    filter["name"] = true;
+
+    JsonObject filter_assets_0 = filter["assets"].createNestedObject();
+    filter_assets_0["content_type"] = true;
+    filter_assets_0["name"] = true;
+    filter_assets_0["browser_download_url"] = true;
+
+    StaticJsonDocument<384> doc;
+
+    DeserializationError error = deserializeJson(doc, response, DeserializationOption::Filter(filter));
 
     // Serial.println(_jsonCapacity);
-	  
-	DeserializationError error = deserializeJson(doc, response);
-	  
+	  	  
 	if (!error) {
 		if (doc.containsKey("tag_name")) {
 			const char* release_tag = doc["tag_name"];
             const char* release_name = doc["name"];
-            bool release_prerelease = doc["prerelease"];
 			if (strcmp(release_tag, _currentTag) != 0) {
-				if (!_preRelease) {
-					if (release_prerelease) {
-						_lastError = "Latest release is a pre-release and GHOTA_ACCEPT_PRERELEASE is set to false.";
-						return false;
-					}
-				}
-				JsonArray assets = doc["assets"];
+                JsonObject assets = doc["assets"][0];
+                const char* asset_name = assets["name"];
+                const char* asset_type = assets["content_type"];
+                const char* asset_url = assets["browser_download_url"];
 				bool valid_asset = false;
-				for (auto asset : assets) {
-					const char* asset_type = asset["content_type"];
-					const char* asset_name = asset["name"];
-					const char* asset_url = asset["browser_download_url"];
-					  
-					if (strcmp(asset_type, GHOTA_CONTENT_TYPE) == 0 && strcmp(asset_name, _binFile) == 0) {
-						_upgradeURL = asset_url;
-						valid_asset = true;
-					} else {
-						valid_asset = false;
-					}
-				}
-				if (valid_asset) {
-					return true;
-				} else {
+				    
+                if (strcmp(asset_type, GHOTA_CONTENT_TYPE) == 0 && strcmp(asset_name, _binFile) == 0) {
+                    _upgradeURL = asset_url;
+                    return true;
+                } else {
 					_lastError = "No valid binary found for latest release.";
 					return false;
-				}
+                }
 			} else {
 				_lastError = "Already running latest release.";
                 return false;

@@ -32,7 +32,7 @@ struct urlDetails_t {
 
 class ESPOTAGitHub {
 	public:
-		ESPOTAGitHub(BearSSL::CertStore* certStore, const char* user, const char* repo, const char* currentTag, const char* binFile, bool preRelease, size_t jsonCapacity = 0);
+		ESPOTAGitHub(BearSSL::CertStore* certStore, const char* user, const char* repo, const char* currentTag, const char* binFile);
 		bool checkUpgrade();
 		bool doUpgrade();
 		String getLastError();
@@ -49,7 +49,6 @@ class ESPOTAGitHub {
 		const char* _repo;
 		const char* _currentTag;
 		const char* _binFile;
-		bool _preRelease;
 		size_t _jsonCapacity;
 };
 
